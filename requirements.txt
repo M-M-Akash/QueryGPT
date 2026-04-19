@@ -1,0 +1,11 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic-settings==2.7.1
+pandas==2.2.3
+ollama==0.4.7
+neo4j>=5.0,<6.0
+langchain-core>=0.3.0,<0.4.0
+langchain-ollama==0.3.2
+llama-index-core==0.14.20
+llama-index-vector-stores-neo4jvector==0.6.0
+llama-index-embeddings-langchain==0.5.0

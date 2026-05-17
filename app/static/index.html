@@ -14,13 +14,13 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      padding: 16px;
     }
 
     /* ── Window ─────────────────────────────────── */
     .window {
-      width: 680px;
-      max-width: 98vw;
-      height: 92vh;
+      width: min(1100px, 100%);
+      height: calc(100vh - 32px);
       background: #fff;
       border-radius: 16px;
       box-shadow: 0 8px 40px rgba(0,0,0,.14);
@@ -68,9 +68,9 @@
     .chat::-webkit-scrollbar-thumb { background: #ddd; border-radius: 3px; }
 
     /* ── Messages ────────────────────────────────── */
-    .msg { display: flex; gap: 10px; max-width: 90%; }
+    .msg { display: flex; gap: 10px; max-width: min(85%, 820px); }
     .msg.user { flex-direction: row-reverse; align-self: flex-end; }
-    .msg.bot  { align-self: flex-start; }
+    .msg.bot  { align-self: flex-start; max-width: 100%; }
 
     .avatar {
       width: 34px; height: 34px; border-radius: 50%;
@@ -182,11 +182,14 @@
       font-family: "Fira Mono", "Courier New", monospace;
       font-size: .8rem; line-height: 1.55;
     }
-    .result-table-wrap { overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; font-size: .8rem; }
-    th { background: #f1f3f4; font-weight: 600; }
-    th, td { padding: 6px 12px; border: 1px solid #e8eaed; text-align: left; white-space: nowrap; }
+    .result-table-wrap { overflow-x: auto; max-width: 100%; }
+    table { border-collapse: collapse; font-size: .82rem; min-width: 100%; }
+    th { background: #f1f3f4; font-weight: 600; white-space: nowrap; }
+    th, td { padding: 7px 14px; border: 1px solid #e8eaed; text-align: left; }
+    td { white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+    td:hover { white-space: normal; overflow: visible; max-width: none; background: #fffde7; }
     tr:nth-child(even) td { background: #fafafa; }
+    tr:nth-child(even) td:hover { background: #fffde7; }
 
     .err-msg { color: #d93025; padding: 10px 14px; font-weight: 500; }
 

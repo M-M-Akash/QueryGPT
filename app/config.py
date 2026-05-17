@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+# pyrefly: ignore [missing-import]
 from pydantic_settings import BaseSettings
 
 
@@ -9,6 +10,7 @@ class Settings(BaseSettings):
     ollama_host: str
     ollama_model: str
     ollama_embed_model: str
+    ollama_num_ctx: int = 8192  # default context window (Ollama defaults to 2048 which is too small)
 
     # Neo4j — configure via .env
     neo4j_url: str

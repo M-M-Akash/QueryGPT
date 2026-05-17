@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QueryGPT</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f0f2f5;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ── Window ─────────────────────────────────── */
+    .window {
+      width: 680px;
+      max-width: 98vw;
+      height: 92vh;
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 8px 40px rgba(0,0,0,.14);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ─────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 20px;
+      border-bottom: 1px solid #e8eaed;
+      background: #fff;
+    }
+    .logo { font-weight: 700; font-size: 1.05rem; color: #1a1a2e; }
+    .badge {
+      font-size: .65rem; font-weight: 600; padding: 2px 8px;
+      background: #e8f4fd; color: #1a73e8; border-radius: 999px;
+    }
+    .ws-btn {
+      margin-left: auto;
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 14px; border-radius: 999px;
+      border: 1.5px solid #dadce0; background: #fff;
+      font-size: .82rem; font-weight: 600; color: #444;
+      cursor: pointer; transition: background .15s;
+    }
+    .ws-btn:hover { background: #f5f5f5; }
+    .ws-icon { font-size: 1rem; }
+
+    /* ── Chat area ───────────────────────────────── */
+    .chat {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 20px 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      scroll-behavior: smooth;
+    }
+    .chat::-webkit-scrollbar { width: 6px; }
+    .chat::-webkit-scrollbar-thumb { background: #ddd; border-radius: 3px; }
+
+    /* ── Messages ────────────────────────────────── */
+    .msg { display: flex; gap: 10px; max-width: 90%; }
+    .msg.user { flex-direction: row-reverse; align-self: flex-end; }
+    .msg.bot  { align-self: flex-start; }
+
+    .avatar {
+      width: 34px; height: 34px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.1rem; flex-shrink: 0;
+      background: linear-gradient(135deg,#667eea,#764ba2);
+    }
+    .avatar.user-av { background: linear-gradient(135deg,#f093fb,#f5576c); }
+
+    .bubble {
+      padding: 10px 14px; border-radius: 14px;
+      font-size: .88rem; line-height: 1.55;
+    }
+    .msg.bot  .bubble { background: #f1f3f4; color: #202124; border-top-left-radius: 4px; }
+    .msg.user .bubble { background: #f5f0ff; color: #1a1a2e; border-top-right-radius: 4px; }
+
+    /* ── Pro tip ─────────────────────────────────── */
+    .tip {
+      background: #f9fbe7; border-left: 4px solid #cddc39;
+      border-radius: 8px; padding: 10px 14px;
+      font-size: .82rem; color: #555; margin: 0 0 6px;
+    }
+    .tip strong { color: #33691e; }
+
+    /* ── Table panel ─────────────────────────────── */
+    .table-panel {
+      margin: 0 20px 10px;
+      border: 2px solid #1a73e8;
+      border-radius: 12px;
+      overflow: hidden;
+      display: none;
+    }
+    .table-panel.visible { display: block; }
+
+    .panel-header {
+      background: #1a73e8; color: #fff;
+      font-weight: 700; font-size: .85rem;
+      padding: 8px 14px;
+    }
+
+    .table-search-wrap {
+      padding: 8px 10px;
+      border-bottom: 1px solid #e8eaed;
+      position: relative;
+    }
+    .table-search-wrap svg {
+      position: absolute; left: 18px; top: 50%;
+      transform: translateY(-50%);
+      color: #999; width: 15px; height: 15px;
+    }
+    #table-search {
+      width: 100%; padding: 7px 10px 7px 34px;
+      border: 1px solid #dadce0; border-radius: 8px;
+      font-size: .84rem; outline: none;
+      transition: border-color .15s;
+    }
+    #table-search:focus { border-color: #1a73e8; }
+
+    .selected-tables { padding: 6px 10px; display: flex; flex-wrap: wrap; gap: 6px; min-height: 38px; }
+
+    .table-tag {
+      display: flex; align-items: center; gap: 5px;
+      background: #fff; border: 1.5px solid #dadce0;
+      border-radius: 8px; padding: 3px 10px;
+      font-size: .82rem; font-weight: 500; color: #202124;
+    }
+    .table-tag .remove {
+      cursor: pointer; color: #d93025; font-weight: 700;
+      font-size: .9rem; line-height: 1; border: none; background: none;
+      padding: 0 0 0 2px;
+    }
+    .table-tag .remove:hover { color: #b52a1c; }
+
+    /* dropdown for search suggestions */
+    .suggestions {
+      background: #fff; border-top: 1px solid #e8eaed;
+      max-height: 140px; overflow-y: auto; display: none;
+    }
+    .suggestions.open { display: block; }
+    .suggestion-item {
+      padding: 8px 14px; font-size: .83rem; cursor: pointer; color: #202124;
+    }
+    .suggestion-item:hover { background: #f1f3f4; }
+    .no-suggestions { padding: 8px 14px; font-size: .83rem; color: #999; font-style: italic; }
+
+    /* ── Confirm button ──────────────────────────── */
+    .confirm-row { padding: 10px 14px; display: flex; justify-content: center; }
+    .confirm-btn {
+      display: flex; align-items: center; gap: 8px;
+      background: #202124; color: #fff;
+      border: none; border-radius: 999px;
+      padding: 10px 28px; font-size: .88rem; font-weight: 600;
+      cursor: pointer; transition: background .15s;
+    }
+    .confirm-btn:hover { background: #444; }
+    .confirm-btn:disabled { background: #aaa; cursor: default; }
+    .confirm-icon { font-size: 1rem; }
+    .timer { font-size: .78rem; opacity: .75; }
+
+    /* ── SQL result card ─────────────────────────── */
+    .result-card {
+      background: #f8f9fa; border: 1px solid #e8eaed;
+      border-radius: 10px; overflow: hidden; font-size: .82rem;
+      margin-top: 6px;
+    }
+    .result-card pre {
+      background: #1e1e2e; color: #cdd6f4;
+      padding: 12px 16px; overflow-x: auto; margin: 0;
+      font-family: "Fira Mono", "Courier New", monospace;
+      font-size: .8rem; line-height: 1.55;
+    }
+    .result-table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+    th { background: #f1f3f4; font-weight: 600; }
+    th, td { padding: 6px 12px; border: 1px solid #e8eaed; text-align: left; white-space: nowrap; }
+    tr:nth-child(even) td { background: #fafafa; }
+
+    .err-msg { color: #d93025; padding: 10px 14px; font-weight: 500; }
+
+    /* ── Input bar ───────────────────────────────── */
+    .input-bar {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 16px;
+      border-top: 1px solid #e8eaed; background: #fff;
+    }
+    #query-input {
+      flex: 1; padding: 10px 16px;
+      border: 1.5px solid #dadce0; border-radius: 999px;
+      font-size: .88rem; outline: none;
+      transition: border-color .15s;
+    }
+    #query-input:focus { border-color: #1a73e8; }
+    #query-input:disabled { background: #f5f5f5; }
+
+    .send-btn {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: #1a73e8; border: none; color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; flex-shrink: 0; transition: background .15s;
+    }
+    .send-btn:hover { background: #1558c0; }
+    .send-btn:disabled { background: #aaa; cursor: default; }
+
+    /* ── Loading dots ────────────────────────────── */
+    .typing { display: flex; gap: 4px; align-items: center; padding: 4px 0; }
+    .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: #aaa; animation: bounce .9s infinite;
+    }
+    .dot:nth-child(2) { animation-delay: .15s; }
+    .dot:nth-child(3) { animation-delay: .3s; }
+    @keyframes bounce {
+      0%,60%,100% { transform: translateY(0); }
+      30% { transform: translateY(-5px); }
+    }
+  </style>
+</head>
+<body>
+<div class="window">
+  <!-- Header -->
+  <header>
+    <span class="logo">QueryGPT</span>
+    <span class="badge">Beta</span>
+    <button class="ws-btn" onclick="alert('Workspaces coming soon!')">
+      <span class="ws-icon">&#9895;</span> Workspaces
+    </button>
+  </header>
+
+  <!-- Chat -->
+  <div class="chat" id="chat">
+    <div class="tip">
+      <strong>Pro Tip</strong>&nbsp; If your use case is specific, consider creating a custom workspace to improve accuracy.
+    </div>
+    <div class="msg bot">
+      <div class="avatar">🐱</div>
+      <div class="bubble">Hey! Ask me a question about your data and I'll help generate a SQL query for you.</div>
+    </div>
+  </div>
+
+  <!-- Table confirmation panel -->
+  <div class="table-panel" id="table-panel">
+    <div class="panel-header">Tables to be used:</div>
+    <div class="table-search-wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input type="text" id="table-search" placeholder="Table name" autocomplete="off" />
+      <div class="suggestions" id="suggestions"></div>
+    </div>
+    <div class="selected-tables" id="selected-tables"></div>
+    <div class="confirm-row">
+      <button class="confirm-btn" id="confirm-btn">
+        <span class="confirm-icon">✔</span>
+        <span id="confirm-label">Looks Good</span>
+        <span class="timer" id="confirm-timer"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Input -->
+  <div class="input-bar">
+    <input type="text" id="query-input" placeholder="Ask me a question about your data…" />
+    <button class="send-btn" id="send-btn" title="Send">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M2 21l21-9L2 3v7l15 2-15 2z"/>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<script>
+  const chatEl = document.getElementById('chat');
+  const inputEl = document.getElementById('query-input');
+  const sendBtn = document.getElementById('send-btn');
+  const tablePanel = document.getElementById('table-panel');
+  const selectedTablesEl = document.getElementById('selected-tables');
+  const tableSearch = document.getElementById('table-search');
+  const suggestionsEl = document.getElementById('suggestions');
+  const confirmBtn = document.getElementById('confirm-btn');
+  const confirmLabel = document.getElementById('confirm-label');
+  const confirmTimer = document.getElementById('confirm-timer');
+
+  let allTables = [];          // all tables from /tables
+  let selectedTables = [];     // user-confirmed table list
+  let pendingQuery = null;     // query waiting for table confirmation
+  let pendingIntent = null;    // intent from /query/prepare
+  let timerInterval = null;
+  let timerStartedAt = 0;
+
+  // ── Load table list on startup ──────────────────────────────────
+  fetch('/tables')
+    .then(r => r.json())
+    .then(d => { allTables = d.tables || []; });
+
+  // ── Helpers ─────────────────────────────────────────────────────
+  function scrollDown() {
+    chatEl.scrollTop = chatEl.scrollHeight;
+  }
+
+  function appendMsg(role, content) {
+    const wrap = document.createElement('div');
+    wrap.className = `msg ${role}`;
+    const av = document.createElement('div');
+    av.className = `avatar${role === 'user' ? ' user-av' : ''}`;
+    av.textContent = role === 'user' ? '🧑' : '🐱';
+    const bub = document.createElement('div');
+    bub.className = 'bubble';
+    if (typeof content === 'string') {
+      bub.innerHTML = content;
+    } else {
+      bub.appendChild(content);
+    }
+    if (role === 'user') { wrap.appendChild(bub); wrap.appendChild(av); }
+    else                  { wrap.appendChild(av); wrap.appendChild(bub); }
+    chatEl.appendChild(wrap);
+    scrollDown();
+    return bub;
+  }
+
+  function appendTyping() {
+    const bub = appendMsg('bot', '<div class="typing"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>');
+    return bub.closest('.msg');
+  }
+
+  function setLoading(on) {
+    inputEl.disabled = on;
+    sendBtn.disabled = on;
+  }
+
+  // ── Table panel ─────────────────────────────────────────────────
+  function renderSelectedTables() {
+    selectedTablesEl.innerHTML = '';
+    selectedTables.forEach(t => {
+      const tag = document.createElement('div');
+      tag.className = 'table-tag';
+      tag.innerHTML = `<span>${t}</span><button class="remove" title="Remove">&times;</button>`;
+      tag.querySelector('.remove').onclick = () => {
+        selectedTables = selectedTables.filter(x => x !== t);
+        renderSelectedTables();
+      };
+      selectedTablesEl.appendChild(tag);
+    });
+  }
+
+  function showTablePanel(tables) {
+    selectedTables = [...tables];
+    renderSelectedTables();
+    tablePanel.classList.add('visible');
+    startConfirmTimer();
+    scrollDown();
+  }
+
+  function hideTablePanel() {
+    tablePanel.classList.remove('visible');
+    clearInterval(timerInterval);
+    timerInterval = null;
+    timerStartedAt = 0;
+    confirmTimer.textContent = '';
+    tableSearch.value = '';
+    suggestionsEl.classList.remove('open');
+    suggestionsEl.innerHTML = '';
+  }
+
+  function startConfirmTimer() {
+    clearInterval(timerInterval);
+    timerInterval = null;
+    timerStartedAt = Date.now();
+    const myStart = timerStartedAt;
+    confirmTimer.textContent = '(0:00)';
+    timerInterval = setInterval(() => {
+      if (timerStartedAt !== myStart) return; // stale callback — a newer timer started
+      const secs = Math.round((Date.now() - myStart) / 1000);
+      const m = Math.floor(secs / 60);
+      const s = String(secs % 60).padStart(2, '0');
+      confirmTimer.textContent = `(${m}:${s})`;
+    }, 1000);
+  }
+
+  // Table search autocomplete
+  tableSearch.addEventListener('input', () => {
+    const q = tableSearch.value.trim().toLowerCase();
+    if (!q) { suggestionsEl.classList.remove('open'); return; }
+    const matches = allTables.filter(t =>
+      t.toLowerCase().includes(q) && !selectedTables.includes(t)
+    );
+    suggestionsEl.innerHTML = '';
+    if (matches.length === 0) {
+      suggestionsEl.innerHTML = '<div class="no-suggestions">No matching tables</div>';
+    } else {
+      matches.slice(0, 8).forEach(t => {
+        const item = document.createElement('div');
+        item.className = 'suggestion-item';
+        item.textContent = t;
+        item.onclick = () => {
+          if (!selectedTables.includes(t)) {
+            selectedTables.push(t);
+            renderSelectedTables();
+          }
+          tableSearch.value = '';
+          suggestionsEl.classList.remove('open');
+        };
+        suggestionsEl.appendChild(item);
+      });
+    }
+    suggestionsEl.classList.add('open');
+  });
+
+  document.addEventListener('click', e => {
+    if (!tableSearch.contains(e.target) && !suggestionsEl.contains(e.target)) {
+      suggestionsEl.classList.remove('open');
+    }
+  });
+
+  tableSearch.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      const val = tableSearch.value.trim();
+      if (val && !selectedTables.includes(val)) {
+        selectedTables.push(val);
+        renderSelectedTables();
+      }
+      tableSearch.value = '';
+      suggestionsEl.classList.remove('open');
+    }
+  });
+
+  // ── Confirm button ───────────────────────────────────────────────
+  confirmBtn.addEventListener('click', async () => {
+    if (!pendingQuery || selectedTables.length === 0) return;
+    hideTablePanel();
+    setLoading(true);
+
+    const loadingBub = appendTyping();
+    try {
+      const res = await fetch('/query/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: pendingQuery,
+          intent: pendingIntent,
+          confirmed_tables: selectedTables,
+        }),
+      });
+      loadingBub.remove();
+      if (!res.ok) {
+        const err = await res.json();
+        appendMsg('bot', `<span style="color:#d93025">Error: ${err.detail}</span>`);
+      } else {
+        const data = await res.json();
+        renderResult(data);
+      }
+    } catch (e) {
+      loadingBub.remove();
+      appendMsg('bot', `<span style="color:#d93025">Network error. Is the server running?</span>`);
+    }
+    pendingQuery = null;
+    pendingIntent = null;
+    setLoading(false);
+    inputEl.focus();
+  });
+
+  // ── Render SQL result ────────────────────────────────────────────
+  function renderResult(data) {
+    const sql = data.sql_result?.sql || '';
+    const rows = data.query_result || [];
+    const err  = data.execution_error;
+
+    const frag = document.createDocumentFragment();
+
+    // SQL block
+    if (sql) {
+      const pre = document.createElement('pre');
+      pre.textContent = sql;
+      const card = document.createElement('div');
+      card.className = 'result-card';
+      card.appendChild(pre);
+      frag.appendChild(card);
+    }
+
+    // Result table or error
+    if (err) {
+      const p = document.createElement('div');
+      p.className = 'err-msg';
+      p.textContent = `Execution error: ${err}`;
+      frag.appendChild(p);
+    } else if (rows.length > 0) {
+      const wrap = document.createElement('div');
+      wrap.className = 'result-card result-table-wrap';
+      const tbl = document.createElement('table');
+      const keys = Object.keys(rows[0]);
+      const thead = document.createElement('thead');
+      thead.innerHTML = '<tr>' + keys.map(k => `<th>${k}</th>`).join('') + '</tr>';
+      const tbody = document.createElement('tbody');
+      rows.forEach(row => {
+        const tr = document.createElement('tr');
+        keys.forEach(k => {
+          const td = document.createElement('td');
+          td.textContent = row[k] ?? '';
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      tbl.appendChild(thead);
+      tbl.appendChild(tbody);
+      wrap.appendChild(tbl);
+      frag.appendChild(wrap);
+    } else if (data.execution_success) {
+      const p = document.createElement('p');
+      p.style.cssText = 'padding:8px 0;color:#666;font-size:.82rem';
+      p.textContent = 'Query executed successfully — no rows returned.';
+      frag.appendChild(p);
+    }
+
+    const container = document.createElement('div');
+    container.appendChild(frag);
+    appendMsg('bot', container);
+  }
+
+  // ── Send query ───────────────────────────────────────────────────
+  async function sendQuery() {
+    const q = inputEl.value.trim();
+    if (!q) return;
+
+    appendMsg('user', q);
+    inputEl.value = '';
+    setLoading(true);
+
+    const loadingBub = appendTyping();
+    try {
+      const res = await fetch('/query/prepare', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: q }),
+      });
+      loadingBub.remove();
+      if (!res.ok) {
+        const err = await res.json();
+        appendMsg('bot', `<span style="color:#d93025">Error: ${err.detail}</span>`);
+        setLoading(false);
+        return;
+      }
+      const data = await res.json();
+      pendingQuery  = q;
+      pendingIntent = data.intent;
+
+      appendMsg('bot', "I'm planning to use the tables below to generate the query.");
+      showTablePanel(data.suggested_tables);
+    } catch (e) {
+      loadingBub.remove();
+      appendMsg('bot', `<span style="color:#d93025">Network error. Is the server running?</span>`);
+    }
+    setLoading(false);
+  }
+
+  sendBtn.addEventListener('click', sendQuery);
+  inputEl.addEventListener('keydown', e => { if (e.key === 'Enter') sendQuery(); });
+</script>
+</body>
+</html>

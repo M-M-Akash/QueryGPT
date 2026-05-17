@@ -24,7 +24,7 @@ class ColumnPruneAgent:
 
     def __init__(self, schema_info: dict[str, Any]):
         self.schema_info = schema_info
-        llm = ChatOllama(model=settings.ollama_model, base_url=settings.ollama_host)
+        llm = ChatOllama(model=settings.ollama_model, base_url=settings.ollama_host, temperature=0, num_ctx=settings.ollama_num_ctx)
         self.structured_llm = llm.with_structured_output(ColumnPruneOutput)
         self.prompt = ChatPromptTemplate.from_messages([
             ("system", "You are a database expert that identifies which columns are relevant to answer a query."),

@@ -27,7 +27,7 @@ class IntentAgent:
     """Determines the intent / workspace of a user's natural language query."""
 
     def __init__(self):
-        llm = ChatOllama(model=settings.ollama_model, base_url=settings.ollama_host)
+        llm = ChatOllama(model=settings.ollama_model, base_url=settings.ollama_host, temperature=0, num_ctx=settings.ollama_num_ctx)
         self.chain = (
             ChatPromptTemplate.from_messages([
                 ("system", "You are a helpful assistant that classifies user queries into workspaces."),

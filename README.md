@@ -4,6 +4,18 @@ A natural language to SQL pipeline powered by a chain of LLM agents, RAG-based f
 
 ---
 
+## Screenshots
+
+**Step 1 — Table selection:** QueryGPT detects the relevant tables and lets you confirm or adjust them before generating the query.
+
+![Table selection panel](<assets/Screenshot From 2026-05-17 16-45-22.png>)
+
+**Step 2 — SQL result:** The generated SQL and query results are displayed inline in the chat.
+
+![SQL result view](<assets/Screenshot From 2026-05-17 17-01-12.png>)
+
+---
+
 ## How It Works
 
 A user query passes through four sequential agents before SQL is generated and executed:

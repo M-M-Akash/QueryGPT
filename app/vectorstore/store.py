@@ -3,6 +3,7 @@ import logging
 from typing import Any
 
 from langchain_ollama import OllamaEmbeddings
+# pyrefly: ignore [missing-import]
 from llama_index.core import Settings, VectorStoreIndex
 from llama_index.core.schema import TextNode
 from llama_index.embeddings.langchain import LangchainEmbedding

@@ -1,10 +1,11 @@
+import json
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 # pyrefly: ignore [missing-import]
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse  # pyrefly: ignore [missing-import]
+from fastapi.responses import FileResponse, StreamingResponse  # pyrefly: ignore [missing-import]
 from fastapi.staticfiles import StaticFiles  # pyrefly: ignore [missing-import]
 
 from app.config import settings
@@ -98,3 +99,48 @@ async def generate_query(request: QueryRequest):
     except Exception as exc:
         logger.exception("Error processing query")
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/query/stream/execute", summary="Stream SQL tokens for pre-confirmed tables via SSE")
+async def stream_execute_query(request: ExecuteRequest):
+    """
+    Server-Sent Events endpoint for the two-step flow.
+    Accepts intent and confirmed tables from /query/prepare and streams SQL generation.
+
+        data: {"event": "columns", "data": {...}}\n\n
+        data: {"event": "samples", "data": [...]}\n\n
+        data: {"event": "token",   "data": "<token>"}\n\n   ← one per LLM token
+        data: {"event": "done",    "data": {}}\n\n
+        data: {"event": "error",   "data": "<message>"}\n\n
+    """
+    if pipeline is None:
+        raise HTTPException(status_code=503, detail="Pipeline not initialised yet")
+
+    async def event_generator():
+        async for event in pipeline.astream_execute(request.query, request.intent, request.confirmed_tables):
+            yield f"data: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@app.post("/query/stream", summary="Stream SQL generation tokens via SSE")
+async def stream_query(request: QueryRequest):
+    """
+    Server-Sent Events endpoint.  Each event is a JSON line:
+
+        data: {"event": "intent",  "data": {...}}\n\n
+        data: {"event": "tables",  "data": [...]}\n\n
+        data: {"event": "columns", "data": {...}}\n\n
+        data: {"event": "samples", "data": [...]}\n\n
+        data: {"event": "token",   "data": "<token>"}\n\n   ← one per LLM token
+        data: {"event": "done",    "data": {}}\n\n
+        data: {"event": "error",   "data": "<message>"}\n\n
+    """
+    if pipeline is None:
+        raise HTTPException(status_code=503, detail="Pipeline not initialised yet")
+
+    async def event_generator():
+        async for event in pipeline.astream_query(request.query):
+            yield f"data: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")

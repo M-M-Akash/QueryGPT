@@ -439,37 +439,88 @@
     }
   });
 
-  // ── Confirm button ───────────────────────────────────────────────
+  // ── Confirm button (streams SQL after table confirmation) ────────
   confirmBtn.addEventListener('click', async () => {
     if (!pendingQuery || selectedTables.length === 0) return;
     hideTablePanel();
     setLoading(true);
 
-    const loadingBub = appendTyping();
+    const bubble = appendMsg('bot', '');
+
+    const statusEl = document.createElement('div');
+    statusEl.style.cssText = 'font-size:.78rem;color:#888;margin-bottom:6px';
+    bubble.appendChild(statusEl);
+
+    const preEl = document.createElement('pre');
+    preEl.style.cssText = [
+      'background:#1e1e2e', 'color:#cdd6f4', 'padding:12px 16px',
+      'border-radius:8px', 'overflow-x:auto', 'margin-top:4px',
+      'font-family:"Fira Mono","Courier New",monospace',
+      'font-size:.8rem', 'line-height:1.55', 'white-space:pre-wrap',
+    ].join(';');
+    bubble.appendChild(preEl);
+
+    const query  = pendingQuery;
+    const intent = pendingIntent;
+    const tables = [...selectedTables];
+    pendingQuery  = null;
+    pendingIntent = null;
+
     try {
-      const res = await fetch('/query/execute', {
+      const res = await fetch('/query/stream/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: pendingQuery,
-          intent: pendingIntent,
-          confirmed_tables: selectedTables,
-        }),
+        body: JSON.stringify({ query, intent, confirmed_tables: tables }),
       });
-      loadingBub.remove();
+
       if (!res.ok) {
         const err = await res.json();
-        appendMsg('bot', `<span style="color:#d93025">Error: ${err.detail}</span>`);
-      } else {
-        const data = await res.json();
-        renderResult(data);
+        bubble.innerHTML = `<span style="color:#d93025">Error: ${err.detail}</span>`;
+        setLoading(false);
+        return;
+      }
+
+      const reader  = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      outer: while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop();
+
+        for (const part of parts) {
+          if (!part.startsWith('data: ')) continue;
+          let event;
+          try { event = JSON.parse(part.slice(6)); } catch { continue; }
+
+          switch (event.event) {
+            case 'columns':
+              statusEl.textContent = 'Pruning columns…';
+              break;
+            case 'samples':
+              statusEl.textContent = `Found ${event.data.length} similar example(s) — generating SQL…`;
+              break;
+            case 'token':
+              preEl.textContent += event.data;
+              scrollDown();
+              break;
+            case 'done':
+              statusEl.textContent = 'Executing query…';
+              await executeAndRender(query, intent, tables, bubble, statusEl, preEl);
+              break outer;
+            case 'error':
+              bubble.innerHTML = `<span style="color:#d93025">Error: ${event.data}</span>`;
+              break outer;
+          }
+        }
       }
     } catch (e) {
-      loadingBub.remove();
-      appendMsg('bot', `<span style="color:#d93025">Network error. Is the server running?</span>`);
+      bubble.innerHTML = `<span style="color:#d93025">Network error. Is the server running?</span>`;
     }
-    pendingQuery = null;
-    pendingIntent = null;
+
     setLoading(false);
     inputEl.focus();
   });
@@ -529,6 +580,83 @@
     const container = document.createElement('div');
     container.appendChild(frag);
     appendMsg('bot', container);
+  }
+
+  // ── Render result into an existing bubble ───────────────────────
+  function renderResultInBubble(bubble, data) {
+    const sql  = data.sql_result?.sql || '';
+    const rows = data.query_result   || [];
+    const err  = data.execution_error;
+
+    if (sql) {
+      const card = document.createElement('div');
+      card.className = 'result-card';
+      const pre = document.createElement('pre');
+      pre.textContent = sql;
+      card.appendChild(pre);
+      bubble.appendChild(card);
+    }
+
+    if (err) {
+      const p = document.createElement('div');
+      p.className = 'err-msg';
+      p.textContent = `Execution error: ${err}`;
+      bubble.appendChild(p);
+    } else if (rows.length > 0) {
+      const wrap = document.createElement('div');
+      wrap.className = 'result-card result-table-wrap';
+      const tbl   = document.createElement('table');
+      const keys  = Object.keys(rows[0]);
+      const thead = document.createElement('thead');
+      thead.innerHTML = '<tr>' + keys.map(k => `<th>${k}</th>`).join('') + '</tr>';
+      const tbody = document.createElement('tbody');
+      rows.forEach(row => {
+        const tr = document.createElement('tr');
+        keys.forEach(k => {
+          const td = document.createElement('td');
+          td.textContent = row[k] ?? '';
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      tbl.appendChild(thead);
+      tbl.appendChild(tbody);
+      wrap.appendChild(tbl);
+      bubble.appendChild(wrap);
+    } else if (data.execution_success) {
+      const p = document.createElement('p');
+      p.style.cssText = 'padding:8px 0;color:#666;font-size:.82rem';
+      p.textContent = 'Query executed successfully — no rows returned.';
+      bubble.appendChild(p);
+    }
+    scrollDown();
+  }
+
+  // ── Execute SQL and render results into an existing bubble ───────
+  async function executeAndRender(query, intent, tables, bubble, statusEl, preEl) {
+    try {
+      const res = await fetch('/query/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, intent, confirmed_tables: tables }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        statusEl.textContent = '';
+        preEl.remove();
+        const errDiv = document.createElement('div');
+        errDiv.style.cssText = 'color:#d93025;font-weight:500;padding:4px 0';
+        errDiv.textContent = `Execution error: ${err.detail}`;
+        bubble.appendChild(errDiv);
+        return;
+      }
+      const data = await res.json();
+      statusEl.remove();
+      preEl.remove();
+      renderResultInBubble(bubble, data);
+    } catch (e) {
+      statusEl.textContent = 'Network error during execution.';
+    }
   }
 
   // ── Send query ───────────────────────────────────────────────────

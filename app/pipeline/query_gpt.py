@@ -1,5 +1,6 @@
+import asyncio
 import logging
-from typing import Any
+from typing import Any, AsyncIterator
 
 import pandas as pd
 
@@ -98,3 +99,90 @@ class QueryGPT:
             prepared["intent"],
             prepared["suggested_tables"],
         )
+
+    async def astream_execute(self, user_query: str, intent: dict[str, Any], confirmed_tables: list[str]) -> AsyncIterator[dict[str, Any]]:
+        """
+        Stream the execution half of the pipeline (columns → samples → SQL tokens)
+        using pre-confirmed intent and tables from /query/prepare.
+
+        Event shapes
+        ------------
+        {"event": "columns", "data": {...}}
+        {"event": "samples", "data": [...]}
+        {"event": "token",   "data": "<str>"}
+        {"event": "done",    "data": {}}
+        {"event": "error",   "data": "<str>"}
+        """
+        try:
+            # Step 3: prune columns (synchronous → thread)
+            column_result = await asyncio.to_thread(
+                self.column_prune_agent.prune_columns, user_query, confirmed_tables
+            )
+            pruned_schema = column_result["pruned_schema"]
+            yield {"event": "columns", "data": pruned_schema}
+
+            # Step 4: RAG retrieval (synchronous → thread)
+            similar_samples = await asyncio.to_thread(
+                self.sql_generator.find_similar_samples, user_query
+            )
+            yield {"event": "samples", "data": similar_samples}
+
+            # Step 5: stream SQL generation tokens
+            async for token in self.sql_generator.astream_sql(
+                user_query, pruned_schema, similar_samples
+            ):
+                yield {"event": "token", "data": token}
+
+            yield {"event": "done", "data": {}}
+
+        except Exception as exc:
+            logger.exception("Streaming execute error")
+            yield {"event": "error", "data": str(exc)}
+
+    async def astream_query(self, user_query: str) -> AsyncIterator[dict[str, Any]]:
+        """
+        Run the pipeline and yield SSE-style progress events.
+
+        Event shapes
+        ------------
+        {"event": "intent",   "data": {...}}
+        {"event": "tables",   "data": [...]}
+        {"event": "columns",  "data": {...}}
+        {"event": "samples",  "data": [...]}
+        {"event": "token",    "data": "<str>"}   ← streamed LLM tokens
+        {"event": "done",     "data": {}}
+        {"event": "error",    "data": "<str>"}
+        """
+        try:
+            # Steps 1-2 are synchronous – run in a thread so the event loop is not blocked
+            prepared = await asyncio.to_thread(self.prepare_query, user_query)
+            yield {"event": "intent", "data": prepared["intent"]}
+            yield {"event": "tables", "data": prepared["suggested_tables"]}
+
+            workspace = prepared["intent"]["workspaces"][0]
+            confirmed_tables = prepared["suggested_tables"]
+
+            # Step 3: prune columns (synchronous)
+            column_result = await asyncio.to_thread(
+                self.column_prune_agent.prune_columns, user_query, confirmed_tables
+            )
+            pruned_schema = column_result["pruned_schema"]
+            yield {"event": "columns", "data": pruned_schema}
+
+            # Step 4: RAG retrieval (synchronous)
+            similar_samples = await asyncio.to_thread(
+                self.sql_generator.find_similar_samples, user_query
+            )
+            yield {"event": "samples", "data": similar_samples}
+
+            # Step 5: stream SQL generation tokens
+            async for token in self.sql_generator.astream_sql(
+                user_query, pruned_schema, similar_samples
+            ):
+                yield {"event": "token", "data": token}
+
+            yield {"event": "done", "data": {}}
+
+        except Exception as exc:
+            logger.exception("Streaming pipeline error")
+            yield {"event": "error", "data": str(exc)}
